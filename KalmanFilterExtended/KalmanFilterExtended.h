@@ -90,7 +90,7 @@ void KalmanFilterExtended<T, NB_STATES, NB_MESURES, NB_ST_MES_COL>::update(const
     //K = P * H' * inv(R + H * P * H')
     MatriceSqr<T, NB_MESURES> tmp(((H * P) * Ht));
     tmp += R;
-    Matrice<T, NB_STATES, NB_MESURES> K((P * Ht) * tmp.invert_gauss());
+    const Matrice<T, NB_STATES, NB_MESURES> K((P * Ht) * tmp.invert_gauss());
     //Matrice<T, NB_STATES, NB_MESURES> K((P * Ht) / (R + ((H * P) * Ht)));
     
     //P = P - K * H * P

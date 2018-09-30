@@ -17,9 +17,27 @@
 typedef unsigned short ushort;
 #endif
 
-#ifndef abs
-#define abs(val) ((val) < static_cast<T>(0) ? -(val) : (val))
-#endif
+namespace MatriceMath {
+    template <typename T>
+    inline T absoluteValue(const T val) {
+        return ((std::numeric_limits<T>::is_signed == true) && ((val) < -std::numeric_limits<T>::epsilon()) ? -(val) : (val));
+    }
+
+    template <typename T>
+    inline bool isGreaterThan(const T val1, const T val2) {
+        return (val1) > (val2 + std::numeric_limits<T>::epsilon());
+    }
+
+    template <typename T>
+    inline bool isLesserThan(const T val1, const T val2) {
+        return (val1 + std::numeric_limits<T>::epsilon()) < val2;
+    }
+
+    template <typename T>
+    inline T areEqual(const T val1, const T val2) {
+        return (isLesserThan(val1, val2) == false) && (isGreaterThan(val1, val2) == false);
+    }
+}
 
 /********************************************************************************************************/
 /******************************************** AbstractMatrice *******************************************/
@@ -34,8 +52,8 @@ public:
     void operator=(const std::initializer_list<std::initializer_list<T>> & values);
     void operator=(const AbstractMatrice<T, R, C>& mat);
     
-    inline ushort rowCount() const;
-    inline ushort columnCount() const;
+    constexpr ushort rowCount() const;
+    constexpr ushort columnCount() const;
     
     virtual T (&operator[](const ushort r)) [C] = 0;
     virtual const T (&operator[](const ushort r) const) [C] = 0;
@@ -83,13 +101,13 @@ void AbstractMatrice<T,R,C>::operator=(const AbstractMatrice<T, R, C>& mat) {
 
 /********************************************************************************************************/
 template <typename T, ushort R, ushort C>
-ushort AbstractMatrice<T,R,C>::rowCount() const {
+constexpr ushort AbstractMatrice<T,R,C>::rowCount() const {
     return R;
 }
 
 /********************************************************************************************************/
 template <typename T, ushort R, ushort C>
-ushort AbstractMatrice<T,R,C>::columnCount() const {
+constexpr ushort AbstractMatrice<T,R,C>::columnCount() const {
     return C;
 }
 
@@ -164,11 +182,11 @@ T AbstractMatrice<T, R, C>::gauss_pivot(){
         //Rechercher max(|mat[i][j]|, r+1 <= i < n)
         ushort k = static_cast<T>(r+1); //Noter k l'indice de ligne du maximum
         for(ushort i = r+1; i < R; ++i)
-            if(abs(operator[](i)[j]) > abs(operator[](k)[j]))
+            if(MatriceMath::isGreaterThan(MatriceMath::absoluteValue(operator[](i)[j]), MatriceMath::absoluteValue(operator[](k)[j])) == true)
                 k = i;
         
         //mat[k][j] est le pivot
-        if(operator[](k)[j] != static_cast<T>(0)){
+        if(MatriceMath::areEqual(operator[](k)[j], static_cast<T>(0)) == false){
             ++r;
             det *= operator[](k)[j];
             
@@ -186,7 +204,7 @@ T AbstractMatrice<T, R, C>::gauss_pivot(){
             //(On simplifie les autres lignes)
             for(ushort i = 0; i < R; ++i){
                 tmp = operator[](i)[j];
-                if((i != r) && (tmp != static_cast<T>(0)))
+                if((i != r) && (MatriceMath::areEqual(tmp, static_cast<T>(0)) == false))
                     for(k = 0U; k < C; ++k)
                         //Soustraire à la ligne i la ligne r multipliée par A[i,j] (de façon à annuler A[i,j])
                         operator[](i)[k] -= operator[](r)[k] * tmp;
@@ -403,18 +421,19 @@ public:
     
     MatriceSqr<T, R> invert() const;
     
+    template <ushort C>
+    Matrice<T, R, C> solve(const AbstractMatrice<T, R, C> &res) const;
+    
+    MatriceSqr<T, R> invert_gauss() const;
+    
+    void decomposition_lu(MatriceSqr<T, R>& l, MatriceSqr<T, R>& u) const;
+    
+    template <ushort C>
+    MatriceSqr<T,R> solve_lu(const AbstractMatrice<T,R,C> & res) const;
+    MatriceSqr<T,R> invert_lu() const;
+    
+    static MatriceSqr<T,R> diag(const Matrice<T,R,static_cast<ushort>(1U)> & res);
     static MatriceSqr<T, R> identity();
-    
-    template <ushort C>
-    Matrice<T, R, C> solve(const AbstractMatrice<T, R, C> &res);
-    
-    MatriceSqr<T, R> invert_gauss();
-    
-    void decomposition_lu(MatriceSqr<T, R>& l, MatriceSqr<T, R>& u);
-    
-    template <ushort C>
-    MatriceSqr<T,R> solve_lu(const AbstractMatrice<T,R,C> & res);
-    MatriceSqr<T,R> invert_lu();
 };
 
 /********************************************************************************************************/
@@ -481,19 +500,8 @@ MatriceSqr<T, R> MatriceSqr<T,R>::invert() const {
 
 /********************************************************************************************************/
 template <typename T, ushort R>
-MatriceSqr<T, R> MatriceSqr<T,R>::identity() {
-    MatriceSqr<T, R> mat;
-    
-    for(ushort i = 0U; i < R; ++i)
-        mat[i][i] = static_cast<T>(1);
-    
-    return mat;
-}
-
-/********************************************************************************************************/
-template <typename T, ushort R>
 template <ushort C>
-Matrice<T, R, C> MatriceSqr<T,R>::solve(const AbstractMatrice<T, R, C> &mat) {
+Matrice<T, R, C> MatriceSqr<T,R>::solve(const AbstractMatrice<T, R, C> &mat) const {
     //solve only systems of n equations and n unknowns
     
     //augmente d'une matrice identite de taille eqs[0].length x eqs[0].length
@@ -505,13 +513,13 @@ Matrice<T, R, C> MatriceSqr<T,R>::solve(const AbstractMatrice<T, R, C> &mat) {
 
 /********************************************************************************************************/
 template <typename T, ushort R>
-MatriceSqr<T, R> MatriceSqr<T,R>::invert_gauss() {
+MatriceSqr<T, R> MatriceSqr<T,R>::invert_gauss() const {
     return MatriceSqr<T, R>::solve<R>(identity());
 }
 
 /********************************************************************************************************/
 template <typename T, ushort R>
-void MatriceSqr<T,R>::decomposition_lu(MatriceSqr<T, R>& l, MatriceSqr<T, R>& u){
+void MatriceSqr<T,R>::decomposition_lu(MatriceSqr<T, R>& l, MatriceSqr<T, R>& u) const {
     //Decomposition en matrice L et U: mat = l*u
     
     u[0U][0U] = MatriceSqr<T, R>::operator[](0U)[0U];
@@ -550,13 +558,13 @@ void MatriceSqr<T,R>::decomposition_lu(MatriceSqr<T, R>& l, MatriceSqr<T, R>& u)
 /********************************************************************************************************/
 template <typename T, ushort R>
 template <ushort C>
-MatriceSqr<T,R> MatriceSqr<T,R>::solve_lu(const AbstractMatrice<T,R,C> & res){
+MatriceSqr<T,R> MatriceSqr<T,R>::solve_lu(const AbstractMatrice<T,R,C> & res) const {
     //Base sur: http://www.lycee-pothier.com/LYCEE/pcsi1/file/ipt/TP/tp10/Matrice.pdf
     
     //l est une matrice identite et u une matrice zero
     
     //mat*X=res => resoudre: l*z=res puis u*x=z => x
-    MatriceSqr<T,R> u = static_cast<MatriceSqr<T,R>>(Matrice<T,R,R>::zeros());
+    MatriceSqr<T,R> u = MatriceSqr<T,R>::zeros();
     MatriceSqr<T,R> l = MatriceSqr<T,R>::identity();
     
     decomposition_lu(l, u);
@@ -588,8 +596,27 @@ MatriceSqr<T,R> MatriceSqr<T,R>::solve_lu(const AbstractMatrice<T,R,C> & res){
 
 /********************************************************************************************************/
 template <typename T, ushort R>
-MatriceSqr<T,R> MatriceSqr<T,R>::invert_lu(){
+MatriceSqr<T,R> MatriceSqr<T,R>::invert_lu() const {
     return solve_lu(identity());
+}
+
+/********************************************************************************************************/
+template <typename T, ushort R>
+MatriceSqr<T,R> MatriceSqr<T,R>::diag(const Matrice<T,R,static_cast<ushort>(1U)> & mat) {
+    MatriceSqr<T, R> res;
+    
+    for(ushort i = 0U; i < R; ++i)
+        res[i][i] = mat[i][0U];
+    
+    return res;
+}
+
+
+/********************************************************************************************************/
+template <typename T, ushort R>
+MatriceSqr<T, R> MatriceSqr<T,R>::identity() {
+    constexpr T ONE = static_cast<T>(1);
+    return diag({{ONE},{ONE},{ONE}});
 }
 
 /********************************************************************************************************/
